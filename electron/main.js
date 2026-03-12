@@ -100,6 +100,9 @@ let serverInstance = null
 
 app.on('ready', async () => {
   try {
+    // Tell the server where to store .env (writable location)
+    process.env.APP_DATA_DIR = app.getPath('userData')
+
     const { startServer } = require('../server/index')
     const result = await startServer()
     serverInstance = result

@@ -1,4 +1,7 @@
-require('dotenv').config()
+const dotenvPath = process.env.APP_DATA_DIR
+  ? require('path').join(process.env.APP_DATA_DIR, '.env')
+  : require('path').join(__dirname, '../.env')
+require('dotenv').config({ path: dotenvPath })
 
 const express = require('express')
 const { WebSocketServer } = require('ws')

@@ -65,7 +65,9 @@ function createRouter(broadcast) {
     const { host, user, port, keyPath } = req.body
     if (!host || !user) return res.status(400).json({ error: 'host 和 user 為必填' })
 
-    const envPath  = path.join(__dirname, '../../.env')
+    const envPath  = process.env.APP_DATA_DIR
+      ? path.join(process.env.APP_DATA_DIR, '.env')
+      : path.join(__dirname, '../../.env')
     const existing = {}
     if (fs.existsSync(envPath)) {
       for (const line of fs.readFileSync(envPath, 'utf8').split('\n')) {
