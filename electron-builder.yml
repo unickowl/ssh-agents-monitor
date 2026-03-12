@@ -1,0 +1,53 @@
+appId: com.agent-monitor.app
+productName: Agent Monitor
+copyright: Copyright © 2024
+
+directories:
+  output: dist-electron
+  buildResources: resources
+
+files:
+  - electron/**/*
+  - server/**/*
+  - public/**/*
+  - package.json
+  - "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}"
+  - "!**/node_modules/.cache"
+  - "!.env"
+  - "!.env.*"
+  - "!.git"
+  - "!.gitignore"
+  - "!openspec/**/*"
+  - "!client/**/*"
+  - "!*.sh"
+  - "!*.md"
+  - "!hooks/**/*"
+
+extraFiles: []
+
+mac:
+  category: public.app-category.developer-tools
+  icon: resources/icon.png
+  target:
+    - dmg
+    - zip
+
+win:
+  icon: resources/icon256.png
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  icon: resources/icon.png
+  category: Development
+  target:
+    - AppImage
+
+publish:
+  provider: github
+  owner: "${GH_OWNER}"
+  repo: "${GH_REPO}"

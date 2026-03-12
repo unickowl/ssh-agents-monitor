@@ -1,4 +1,4 @@
-# Claude Agent Monitor
+# Claude Agents Monitor
 
 > 在公司內部透過 SSH 即時監控遠端機器上多個 Claude Code Agent 的執行狀態。
 
@@ -10,7 +10,7 @@
 
 這個工具受到 [Spectra](https://github.com/kaochenlong/spectra-app) 的啟發。Spectra 的介面設計很漂亮，也能顯示 agent 的執行狀態，但它假設 monitor 和 agent 跑在同一台機器上。在公司環境中，Claude Code 通常跑在遠端的開發機或 CI 伺服器，本機只是觀察端，所以決定自己做一份加上 SSH 遠端連線能力的版本。
 
-只要有 agent 需要介入，不管它的視窗被蓋在哪裡，桌面和瀏覽器通知都會立刻跳出來。
+只要有 agent 需要介入，不管它的視窗被蓋在哪裡，桌面通知都會立刻跳出來。
 
 ---
 
@@ -19,10 +19,14 @@
 - **即時狀態看板** — 每個 agent 一張卡片，顯示目前任務、執行進度、工具呼叫、token 用量
 - **SSH 輪詢** — 透過 SSH 連接遠端機器，讀取 `/tmp/claude-agents/` 下的 JSONL log
 - **Alerts bar** — 需要人工介入的 agent 會在頂部彙整顯示，可點「忽略」暫時消除
-- **桌面 + 瀏覽器通知** — 狀態變化（等待確認、錯誤、完成）自動推送通知
+- **原生桌面通知** — 使用 Electron 原生 Notification API，狀態變化（等待確認、錯誤、完成）自動推送
+- **系統匣常駐** — 關閉視窗後應用在系統匣繼續運行，圖示根據 agent 狀態變化
+- **視窗置頂** — 點擊 📌 圖釘將監控視窗固定在最上層
+- **Compact Mode** — 精簡模式，縮小為迷你監控面板，僅顯示 agent 狀態摘要
 - **24h token 用量** — 從遠端 `~/.claude/projects/` 彙整當日 input/output/cache token 數
 - **Setup wizard** — 初次啟動自動跳出 SSH 設定介面，測試連線後一鍵安裝 hooks
 - **Demo 模式** — 不設定 `.env` 時自動跑 mock 資料，可直接預覽介面
+- **自動更新** — 透過 GitHub Releases 自動檢查並下載更新
 - **亮 / 暗主題切換**、**RWD 支援**
 
 ---
@@ -31,17 +35,26 @@
 
 ```
 agent-monitor/
+├── electron/
+│   ├── main.js              # Electron 主進程入口
+│   ├── preload.js           # 安全的 preload script (contextBridge)
+│   ├── tray.js              # 系統匣管理
+│   ├── notifications.js     # 原生通知管理
+│   └── updater.js           # 自動更新邏輯
 ├── server/
-│   └── index.js          # Express + WebSocket server，SSH 輪詢、usage stats
+│   └── index.js             # Express + WebSocket server，SSH 輪詢、usage stats
+├── client/
+│   └── src/                 # Vue 3 + TailwindCSS 前端
 ├── public/
-│   └── index.html        # 單頁前端，WebSocket 接收推播
-├── agent-log-hook.sh     # PostToolUse hook — 記錄工具呼叫
-├── agent-stop-hook.sh    # Stop hook — 記錄完成 / 錯誤
-├── agent-permission-hook.sh  # PermissionRequest hook — 記錄等待確認
-├── agent-session-end-hook.sh # SessionEnd hook — 記錄 session 關閉
-├── agent-prompt-hook.sh  # UserPromptSubmit hook — 清除等待狀態
-├── agent-logger.sh       # 手動日誌工具（選用）
-├── deploy-hooks.sh       # 一鍵安裝腳本（從 setup wizard 呼叫）
+│   └── index.html           # 建置後的前端靜態檔
+├── resources/               # 應用圖示、匣圖示
+├── electron-builder.yml     # 打包設定
+├── agent-log-hook.sh        # PostToolUse hook — 記錄工具呼叫
+├── agent-stop-hook.sh       # Stop hook — 記錄完成 / 錯誤
+├── agent-permission-hook.sh # PermissionRequest hook — 記錄等待確認
+├── agent-session-end-hook.sh# SessionEnd hook — 記錄 session 關閉
+├── agent-prompt-hook.sh     # UserPromptSubmit hook — 清除等待狀態
+├── deploy-hooks.sh          # 一鍵安裝腳本
 └── .env.example
 ```
 
@@ -49,7 +62,7 @@ agent-monitor/
 
 ## 快速開始
 
-### 1. Clone & 安裝依賴
+### 安裝依賴
 
 ```bash
 git clone <this-repo>
@@ -57,15 +70,55 @@ cd agent-monitor
 pnpm install
 ```
 
-### 2. 啟動
+### 啟動（Electron 桌面應用）
 
 ```bash
 pnpm start
 ```
 
-瀏覽器會自動開啟 `http://localhost:13845`。
-
 首次啟動會顯示 **Setup Wizard**，引導你填入 SSH 連線資訊並安裝遠端 hooks。
+
+### 開發模式
+
+```bash
+pnpm dev
+```
+
+會同時啟動 Vite dev server（HMR）+ Electron，並自動開啟 DevTools。
+
+### 打包
+
+```bash
+pnpm run build:electron
+```
+
+產出檔案在 `dist-electron/` 目錄：
+- macOS: `.dmg` + `.zip`
+- Windows: NSIS `.exe`
+- Linux: `.AppImage`
+
+---
+
+## 視窗功能
+
+### 視窗置頂（Always on Top）
+
+點擊標題列的 📌 圖釘按鈕，將視窗固定在所有其他視窗之上。也可從系統匣右鍵選單切換。
+
+### Compact Mode（精簡模式）
+
+點擊標題列的最小化按鈕切換精簡模式：
+- 視窗縮小為 320px 寬的迷你面板
+- 每個 agent 僅顯示一行（狀態色點 + 名稱 + 狀態）
+- 自動啟用置頂
+- 點擊 agent 可展開詳情
+- 雙擊 agent 可跳回完整模式
+
+### 系統匣
+
+- 關閉視窗時，應用最小化到系統匣繼續運行
+- 匣圖示會根據 agent 狀態變化（有等待中的 agent 時顯示警示圖示）
+- 右鍵選單：顯示視窗、agent 狀態摘要、視窗置頂、檢查更新、退出
 
 ---
 

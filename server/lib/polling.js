@@ -8,7 +8,17 @@ const { buildAgentState }   = require('./parser')
 const { detectAndNotify }   = require('./notify')
 
 const POLL_INTERVAL  = parseInt(process.env.POLL_INTERVAL || '3000')
-const REMOTE_LOG_DIR = process.env.REMOTE_LOG_DIR || '/tmp/claude-agents'
+
+// Sanitize shell path to prevent command injection
+function safePath(p) {
+  const clean = (p || '').replace(/[^a-zA-Z0-9/_.\-~]/g, '')
+  if (!clean) throw new Error('Invalid path')
+  return clean
+}
+
+function getRemoteLogDir() {
+  return safePath(process.env.REMOTE_LOG_DIR || '/tmp/claude-agents')
+}
 
 // ─── Demo mode ────────────────────────────────────────────────────────────────
 
@@ -147,9 +157,10 @@ async function fetchRemoteLogs(broadcast) {
   if (!ssh) return null
 
   try {
+    const logDir = getRemoteLogDir()
     const [tailResult, mtimeResult] = await Promise.all([
-      ssh.execCommand(`tail -n 200 --verbose ${REMOTE_LOG_DIR}/*.jsonl 2>/dev/null || echo ""`),
-      ssh.execCommand(`find ${REMOTE_LOG_DIR} -name "*.jsonl" -printf "%f %T@\n" 2>/dev/null || echo ""`),
+      ssh.execCommand(`tail -n 200 --verbose ${logDir}/*.jsonl 2>/dev/null || echo ""`),
+      ssh.execCommand(`find ${logDir} -name "*.jsonl" -printf "%f %T@\n" 2>/dev/null || echo ""`),
     ])
 
     // mtime 對照表：{ "agent-id.jsonl": unixTimestamp }
@@ -226,13 +237,24 @@ async function poll(broadcast) {
   }
 }
 
+let pollTimer = null
+
+async function pollLoop(broadcast) {
+  await poll(broadcast)
+  pollTimer = setTimeout(() => pollLoop(broadcast), POLL_INTERVAL)
+}
+
 function startPolling(broadcast) {
-  poll(broadcast)
-  setInterval(() => poll(broadcast), POLL_INTERVAL)
+  pollLoop(broadcast)
+}
+
+function stopPolling() {
+  if (pollTimer) { clearTimeout(pollTimer); pollTimer = null }
 }
 
 module.exports = {
   startPolling,
+  stopPolling,
   poll,
   fetchRemoteLogs,
   fetchUsageStats,

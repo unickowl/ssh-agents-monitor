@@ -3,10 +3,11 @@
                  border-b border-border bg-card/90 backdrop-blur supports-[backdrop-filter]:bg-card/75
                  header-tech">
 
-    <!-- Logo -->
+    <!-- Logo + version -->
     <span class="font-mono text-xs font-semibold tracking-widest uppercase shrink-0 select-none">
       <span class="text-muted-foreground">▸</span>
       <span class="text-primary">claude</span><span class="text-muted-foreground opacity-60">/</span><span class="text-foreground">agents</span>
+      <span class="text-[9px] font-normal text-muted-foreground/50 ml-1">v{{ appVersion }}</span>
     </span>
 
     <!-- Connection badge -->
@@ -37,14 +38,36 @@
     <!-- Bell (alerts floating panel) -->
     <AlertsPanel class="ml-1" />
 
+    <!-- Test notification - dev only -->
+    <button v-if="isDev && isElectron" @click="testNotify"
+      title="測試通知"
+      class="icon-btn text-muted-foreground hover:text-amber-400">
+      <BellRingIcon :size="15" />
+    </button>
+
+    <!-- Pin (Always on Top) - Electron only -->
+    <button v-if="isElectron" @click="togglePin"
+      :title="isPinned ? '取消置頂' : '視窗置頂'"
+      class="icon-btn" :class="{ 'text-primary': isPinned }">
+      <PinIcon :size="15" />
+    </button>
+
+    <!-- Compact mode toggle - Electron only -->
+    <button v-if="isElectron" @click="toggleCompact"
+      title="精簡模式"
+      class="icon-btn">
+      <MinimizeIcon :size="15" />
+    </button>
+
     <!-- Settings -->
     <button @click="$emit('open-settings')" title="SSH 設定" class="icon-btn">
       <SettingsIcon :size="15" />
     </button>
 
-    <!-- Theme toggle -->
-    <button @click="toggle" :title="theme === 'dark' ? '切換亮色' : '切換暗色'" class="icon-btn">
-      <SunIcon v-if="theme === 'dark'" :size="15" />
+    <!-- Theme toggle (auto → light → dark) -->
+    <button @click="toggle" :title="themeTitle" class="icon-btn">
+      <MonitorIcon v-if="theme === 'auto'" :size="15" />
+      <SunIcon v-else-if="theme === 'light'" :size="15" />
       <MoonIcon v-else :size="15" />
     </button>
 
@@ -52,10 +75,11 @@
 </template>
 
 <script setup>
-import { computed } from 'vue'
-import { SettingsIcon, SunIcon, MoonIcon } from 'lucide-vue-next'
+import { computed, ref, onMounted } from 'vue'
+import { SettingsIcon, SunIcon, MoonIcon, MonitorIcon, PinIcon, MinimizeIcon, BellRingIcon } from 'lucide-vue-next'
 import { useStore }    from '@/composables/useStore'
 import { useTheme }    from '@/composables/useTheme'
+import { useCompactMode } from '@/composables/useCompactMode'
 import ConnBadge   from './ui/ConnBadge.vue'
 import StatBadge   from './ui/StatBadge.vue'
 import AlertsPanel from './AlertsPanel.vue'
@@ -64,6 +88,32 @@ defineEmits(['open-settings'])
 
 const { connection, pollTime, counts, staleCnt, hiddenCnt, showStale, showHidden } = useStore()
 const { theme, toggle } = useTheme()
+
+const themeTitle = computed(() => {
+  if (theme.value === 'auto')  return '主題：自動（跟隨系統）'
+  if (theme.value === 'light') return '主題：亮色'
+  return '主題：暗色'
+})
+const { isElectron, toggleCompact } = useCompactMode()
+
+const isDev = import.meta.env.DEV
+const isPinned = ref(false)
+const appVersion = ref(__APP_VERSION__)
+
+onMounted(async () => {
+  if (isElectron) {
+    isPinned.value = await window.electronAPI.getAlwaysOnTop()
+  }
+})
+
+async function togglePin() {
+  isPinned.value = !isPinned.value
+  await window.electronAPI.setAlwaysOnTop(isPinned.value)
+}
+
+async function testNotify() {
+  await window.electronAPI.testNotification()
+}
 
 const statItems = computed(() => [
   { key: 'running',  dot: 'running',  label: '執行中', value: counts.value.running  },

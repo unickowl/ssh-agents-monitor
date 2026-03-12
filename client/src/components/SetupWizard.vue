@@ -59,6 +59,32 @@
             儲存並繼續 →
           </button>
         </div>
+
+        <!-- Undeploy (only when reopening settings, not first-time setup) -->
+        <div v-if="canClose" class="border-t border-border pt-4 mt-2">
+          <button @click="showUndeploy = !showUndeploy"
+            class="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-destructive transition-colors">
+            <TrashIcon :size="13" />
+            移除遠端監控腳本
+          </button>
+
+          <div v-if="showUndeploy" class="mt-3 space-y-3">
+            <p class="text-xs text-muted-foreground">
+              這會刪除遠端 <code class="text-primary">~/.claude/</code> 中的 5 個 hook 腳本，
+              並從 <code class="text-primary">settings.json</code> 移除對應設定。
+            </p>
+
+            <div v-if="undeployLog.length" class="rounded-md border border-border bg-muted p-3 font-mono text-xs max-h-36 overflow-y-auto space-y-0.5">
+              <p v-for="(line, i) in undeployLog" :key="i" :class="line.ok ? 'text-green-400' : 'text-destructive'">
+                {{ line.ok ? '✓' : '✗' }} {{ line.msg }}
+              </p>
+            </div>
+
+            <button @click="runUndeploy" :disabled="undeploying" class="btn btn-outline text-destructive border-destructive/40 hover:bg-destructive/10">
+              {{ undeploying ? '移除中…' : '確認移除' }}
+            </button>
+          </div>
+        </div>
       </div>
 
       <!-- ── Step 2: Deploy Hooks ───────────────────────────── -->
@@ -109,17 +135,20 @@
 
 <script setup>
 import { ref, reactive, onMounted } from 'vue'
-import { XIcon, ChevronRightIcon } from 'lucide-vue-next'
+import { XIcon, ChevronRightIcon, TrashIcon } from 'lucide-vue-next'
 import Field from './ui/Field.vue'
 
 const props = defineProps({ canClose: Boolean })
 const emit  = defineEmits(['close', 'done'])
 
-const step         = ref(1)
-const loading      = ref(false)
-const deploying    = ref(false)
-const showAdvanced = ref(false)
-const deployLog    = ref([])
+const step          = ref(1)
+const loading       = ref(false)
+const deploying     = ref(false)
+const showAdvanced  = ref(false)
+const deployLog     = ref([])
+const showUndeploy  = ref(false)
+const undeploying   = ref(false)
+const undeployLog   = ref([])
 
 const form = reactive({ host: '', user: '', port: '22', keyPath: '' })
 const status = reactive({ msg: '', ok: false })
@@ -204,6 +233,19 @@ async function runDeploy() {
 function skipDeploy() {
   step.value = 3
   setTimeout(() => emit('done'), 800)
+}
+
+async function runUndeploy() {
+  undeploying.value = true
+  undeployLog.value = []
+  try {
+    const r = await fetch('/api/config/undeploy', { method: 'POST' }).then(r => r.json())
+    undeployLog.value = r.log || []
+  } catch {
+    undeployLog.value.push({ msg: '移除請求失敗', ok: false })
+  } finally {
+    undeploying.value = false
+  }
 }
 
 // Pre-fill if reopening settings

@@ -10,6 +10,16 @@ const { ensureSSH, resolveKeyPath } = require('../lib/ssh')
 
 const PORT = process.env.PORT || 13845
 
+// Sanitize value for .env file — strip newlines, carriage returns, null bytes
+function sanitizeEnvValue(v) {
+  return (v || '').replace(/[\r\n\0]/g, '').trim()
+}
+
+// Validate path for shell safety
+function isValidPath(p) {
+  return /^[a-zA-Z0-9/_.\-~]+$/.test(p)
+}
+
 function createRouter(broadcast) {
   const router = Router()
 
@@ -64,11 +74,11 @@ function createRouter(broadcast) {
       }
     }
 
-    existing.SSH_HOST = host.trim()
-    existing.SSH_USER = user.trim()
-    existing.SSH_PORT = String(port || 22)
+    existing.SSH_HOST = sanitizeEnvValue(host)
+    existing.SSH_USER = sanitizeEnvValue(user)
+    existing.SSH_PORT = String(parseInt(port) || 22)
     existing.PORT     = String(PORT)
-    if (keyPath?.trim()) existing.SSH_KEY_PATH = keyPath.trim()
+    if (keyPath?.trim()) existing.SSH_KEY_PATH = sanitizeEnvValue(keyPath)
 
     fs.writeFileSync(
       envPath,
@@ -104,8 +114,10 @@ function createRouter(broadcast) {
 
       const { stdout: homeRaw } = await ssh.execCommand('echo $HOME')
       const homeDir   = homeRaw.trim()
+      if (!isValidPath(homeDir)) throw new Error(`不安全的 HOME 路徑: ${homeDir}`)
       const claudeDir = `${homeDir}/.claude`
       const logDir    = process.env.REMOTE_LOG_DIR || '/tmp/claude-agents'
+      if (!isValidPath(logDir)) throw new Error(`不安全的 log 目錄路徑: ${logDir}`)
 
       await ssh.execCommand(`mkdir -p "${claudeDir}" "${logDir}"`)
       step('目錄建立完成')
@@ -182,6 +194,100 @@ function createRouter(broadcast) {
 
       step(`settings.json 更新完成（新增 ${added} 個 hooks）`)
       step('🎉 安裝完成！')
+      res.json({ ok: true, log })
+    } catch (err) {
+      step(err.message, false)
+      res.status(500).json({ ok: false, error: err.message, log })
+    }
+  })
+
+  // ── 移除遠端 hooks ────────────────────────────────────────────────────────
+  router.post('/config/undeploy', async (req, res) => {
+    const log  = []
+    const step = (msg, ok = true) => {
+      log.push({ msg, ok })
+      console.log(`${ok ? '✓' : '✗'} Undeploy: ${msg}`)
+    }
+
+    try {
+      const ssh = await ensureSSH(broadcast)
+      if (!ssh) throw new Error('SSH 連線失敗，請先確認連線正常')
+
+      const { stdout: homeRaw } = await ssh.execCommand('echo $HOME')
+      const homeDir   = homeRaw.trim()
+      if (!isValidPath(homeDir)) throw new Error(`不安全的 HOME 路徑: ${homeDir}`)
+      const claudeDir = `${homeDir}/.claude`
+
+      const scripts = [
+        { file: 'agent-log-hook.sh',         event: 'PostToolUse'       },
+        { file: 'agent-stop-hook.sh',        event: 'Stop'              },
+        { file: 'agent-permission-hook.sh',  event: 'PermissionRequest' },
+        { file: 'agent-session-end-hook.sh', event: 'SessionEnd'        },
+        { file: 'agent-prompt-hook.sh',      event: 'UserPromptSubmit'  },
+      ]
+
+      // 1. 刪除腳本檔案
+      for (const s of scripts) {
+        const remotePath = `${claudeDir}/${s.file}`
+        const { stdout: exists } = await ssh.execCommand(`[ -f "${remotePath}" ] && echo yes || echo no`)
+        if (exists.trim() === 'yes') {
+          await ssh.execCommand(`rm "${remotePath}"`)
+          step(`已刪除 ${s.file}`)
+        } else {
+          step(`${s.file} 不存在，略過`)
+        }
+      }
+
+      // 2. 從 settings.json 移除對應的 hook 設定
+      const { stdout: hasSettings } = await ssh.execCommand(
+        `[ -f "${claudeDir}/settings.json" ] && echo yes || echo no`
+      )
+      if (hasSettings.trim() === 'yes') {
+        // 備份
+        await ssh.execCommand(`cp "${claudeDir}/settings.json" "${claudeDir}/settings.json.bak"`)
+        step('備份 settings.json → settings.json.bak')
+
+        const { stdout: rawJson } = await ssh.execCommand(`cat "${claudeDir}/settings.json"`)
+        let settings = {}
+        try { settings = JSON.parse(rawJson.trim()) } catch { settings = {} }
+
+        if (settings.hooks) {
+          let removed = 0
+          for (const s of scripts) {
+            const cmd = `${claudeDir}/${s.file}`
+            const event = s.event
+            if (settings.hooks[event]) {
+              const before = settings.hooks[event].length
+              settings.hooks[event] = settings.hooks[event].filter(h => {
+                const cmds = (h.hooks || []).map(hh => hh.command)
+                return !cmds.includes(cmd)
+              })
+              if (settings.hooks[event].length === 0) {
+                delete settings.hooks[event]
+              }
+              removed += before - (settings.hooks[event]?.length || 0)
+            }
+          }
+          // 如果 hooks 物件空了就移除
+          if (Object.keys(settings.hooks).length === 0) {
+            delete settings.hooks
+          }
+
+          // 寫回
+          const tmpFile = path.join(os.tmpdir(), `claude-settings-${Date.now()}.json`)
+          fs.writeFileSync(tmpFile, JSON.stringify(settings, null, 2), 'utf8')
+          await ssh.putFile(tmpFile, `${claudeDir}/settings.json`)
+          fs.unlinkSync(tmpFile)
+
+          step(`settings.json 已更新（移除 ${removed} 個 hooks）`)
+        } else {
+          step('settings.json 中無 hooks 設定')
+        }
+      } else {
+        step('settings.json 不存在，略過')
+      }
+
+      step('🗑️ 移除完成！')
       res.json({ ok: true, log })
     } catch (err) {
       step(err.message, false)
