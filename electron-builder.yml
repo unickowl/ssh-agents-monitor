@@ -29,13 +29,11 @@ extraFiles: []
 
 mac:
   category: public.app-category.developer-tools
-  icon: resources/icon.png
   target:
     - dmg
     - zip
 
 win:
-  icon: resources/icon256.png
   target:
     - nsis
 
@@ -44,7 +42,6 @@ nsis:
   allowToChangeInstallationDirectory: true
 
 linux:
-  icon: resources/icon.png
   category: Development
   target:
     - AppImage
