@@ -22,5 +22,9 @@ yarn.lock
 *.log
 npm-debug.log*
 
-# Build output
+# Build output (Vue app builds into public/)
 dist/
+public/assets/
+
+# Client lock file (root lock file is enough)
+client/package-lock.json

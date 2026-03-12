@@ -1,7 +1,5 @@
 # Claude Agent Monitor
 
-![example](/public/images/example.png)
-
 > 在公司內部透過 SSH 即時監控遠端機器上多個 Claude Code Agent 的執行狀態。
 
 ---
