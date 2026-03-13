@@ -17,7 +17,7 @@
     </header>
 
     <!-- Agent List -->
-    <ul class="divide-y divide-border/50 p-2">
+    <ul class="divide-y divide-border/50 p-2 space-y-2">
       <li v-for="agent in visibleAgents" :key="agent.id"
         class="compact-row px-3 py-1.5 cursor-pointer bg-card hover:bg-muted/40 transition-colors border rounded"
         :class="{
@@ -28,7 +28,7 @@
         @dblclick="$emit('jump-to-agent', agent.id)">
 
         <!-- Main row -->
-        <div class="flex items-center gap-2 min-w-0">
+        <div class="flex items-center gap-2 min-w-0 overflow-hidden">
           <span class="status-dot shrink-0" :class="'dot-' + agent.status" />
           <span class="text-xs font-medium truncate flex-1 min-w-0">
             {{ customNames[agent.id] || agent.id }}

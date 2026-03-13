@@ -35,6 +35,9 @@
       {{ pollTime }}
     </span>
 
+    <!-- Storage panel -->
+    <StoragePanel />
+
     <!-- Bell (alerts floating panel) -->
     <AlertsPanel class="ml-1" />
 
@@ -82,7 +85,8 @@ import { useTheme }    from '@/composables/useTheme'
 import { useCompactMode } from '@/composables/useCompactMode'
 import ConnBadge   from './ui/ConnBadge.vue'
 import StatBadge   from './ui/StatBadge.vue'
-import AlertsPanel from './AlertsPanel.vue'
+import AlertsPanel  from './AlertsPanel.vue'
+import StoragePanel from './StoragePanel.vue'
 
 defineEmits(['open-settings'])
 

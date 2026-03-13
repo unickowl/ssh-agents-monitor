@@ -13,6 +13,7 @@ const { state, isDemoMode }  = require('./lib/state')
 const { startPolling, generateDemoUsage, POLL_INTERVAL } = require('./lib/polling')
 const createAgentsRouter     = require('./routes/agents')
 const createConfigRouter     = require('./routes/config')
+const createLogsRouter       = require('./routes/logs')
 
 // ─── HTTP + WebSocket ─────────────────────────────────────────────────────────
 
@@ -50,6 +51,7 @@ wss.on('connection', ws => {
 
 app.use('/api', createAgentsRouter(broadcast))
 app.use('/api', createConfigRouter(broadcast))
+app.use('/api', createLogsRouter(broadcast))
 
 // ─── Exported start function (for Electron) ─────────────────────────────────
 
