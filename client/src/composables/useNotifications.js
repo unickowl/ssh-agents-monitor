@@ -16,6 +16,8 @@ export function useNotifications() {
   }
 
   function send(title, body) {
+    // In Electron, notifications are handled by the main process — skip to avoid duplicates
+    if ('electronAPI' in window) return
     if (!('Notification' in window) || Notification.permission !== 'granted') return
     new Notification(title, { body, icon: '/favicon.ico' })
   }
