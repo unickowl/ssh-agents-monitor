@@ -367,7 +367,7 @@ async function fetchRemoteLogs(broadcast) {
   try {
     const logDir = getRemoteLogDir()
     const [tailResult, mtimeResult] = await Promise.all([
-      ssh.execCommand(`tail -n 200 --verbose ${logDir}/*.jsonl 2>/dev/null || echo ""`),
+      ssh.execCommand(`tail -n 500 --verbose ${logDir}/*.jsonl 2>/dev/null || echo ""`),
       ssh.execCommand(`find ${logDir} -name "*.jsonl" -printf "%f %T@\n" 2>/dev/null || echo ""`),
     ])
 

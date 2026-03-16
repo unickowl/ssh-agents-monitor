@@ -33,13 +33,28 @@
           <span class="text-xs font-medium truncate flex-1 min-w-0">
             {{ customNames[agent.id] || agent.id }}
           </span>
-          <span class="text-[10px] text-muted-foreground shrink-0 max-w-[120px] truncate">
+          <span v-if="taskTotal(agent) > 0"
+            class="text-[10px] font-mono text-muted-foreground shrink-0">
+            {{ taskDone(agent) }}/{{ taskTotal(agent) }}
+          </span>
+          <span v-else class="text-[10px] text-muted-foreground shrink-0 max-w-[120px] truncate">
             {{ statusText(agent) }}
           </span>
         </div>
 
+        <!-- Progress bar (always visible when tasks exist) -->
+        <div v-if="taskTotal(agent) > 0" class="mt-1 h-0.5 rounded-full bg-muted overflow-hidden">
+          <div class="h-full rounded-full transition-all duration-500"
+            :style="{ width: taskPct(agent) + '%', background: statusColor(agent.status) }" />
+        </div>
+
         <!-- Expanded details -->
         <div v-if="expandedId === agent.id" class="mt-1.5 pl-4 text-[10px] text-muted-foreground space-y-0.5">
+          <div v-if="taskTotal(agent) > 0">
+            <span class="text-foreground/70">進度：</span>
+            {{ taskDone(agent) }}/{{ taskTotal(agent) }} 完成
+            <span v-if="taskInProg(agent) > 0"> · {{ taskInProg(agent) }} 進行中</span>
+          </div>
           <div v-if="agent.currentStep">
             <span class="text-foreground/70">步驟：</span>{{ agent.currentStep }}
           </div>
@@ -91,6 +106,23 @@ function statusText(agent) {
   if (agent.status === 'complete') return '完成'
   return agent.currentStep || '執行中'
 }
+
+function taskDone(agent)  { return agent.tasks?.filter(t => t.status === 'completed').length ?? 0 }
+function taskInProg(agent){ return agent.tasks?.filter(t => t.status === 'in_progress').length ?? 0 }
+function taskTotal(agent) { return agent.tasks?.length ?? 0 }
+function taskPct(agent)   {
+  const total = taskTotal(agent)
+  return total > 0 ? Math.round(taskDone(agent) / total * 100) : 0
+}
+
+const STATUS_COLOR = {
+  running:  'hsl(184,90%,54%)',
+  waiting:  'hsl(38,95%,62%)',
+  error:    'hsl(0,88%,65%)',
+  complete: 'hsl(148,80%,48%)',
+  idle:     'hsl(215,14%,44%)',
+}
+function statusColor(status) { return STATUS_COLOR[status] ?? STATUS_COLOR.idle }
 
 function toggleExpand(id) {
   expandedId.value = expandedId.value === id ? null : id

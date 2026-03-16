@@ -125,12 +125,14 @@ except Exception:
   # ── 攔截 tasks.md 寫入：解析 markdown checkbox（OpenSpec / SDD）────────
   # 當 Write 或 Edit 的目標是 tasks.md 時，讀取最新內容並解析進度
   if { [ "$TOOL" = "Write" ] || [ "$TOOL" = "Edit" ]; } && command -v python3 &>/dev/null; then
-    # 取 tool_input.path（Write 和 Edit 都用這個 key）
+    # 取 tool_input.file_path 或 path（Claude Code 的 Edit/Write 工具用 file_path）
     TOOL_PATH=$(echo "$INPUT" | python3 -c "
 import sys, json
 try:
     d = json.load(sys.stdin)
-    p = d.get('tool_input', {}).get('path', '')
+    inp = d.get('tool_input', {})
+    # Edit & Write tools use 'file_path'; fallback to 'path' for compatibility
+    p = inp.get('file_path', '') or inp.get('path', '')
     print(p)
 except Exception:
     print('')
