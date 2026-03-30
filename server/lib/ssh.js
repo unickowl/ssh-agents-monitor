@@ -36,6 +36,10 @@ async function connectSSH(overrides = {}) {
   const keyPath = resolveKeyPath(overrides.keyPath ?? process.env.SSH_KEY_PATH)
   if (keyPath) cfg.privateKeyPath = keyPath
 
+  cfg.keepaliveInterval  = 10_000   // 每 10 秒送一次 keep-alive
+  cfg.keepaliveCountMax  = 3        // 連續 3 次沒回應就斷開
+  cfg.readyTimeout       = 15_000   // 連線建立逾時 15 秒
+
   await ssh.connect(cfg)
   return ssh
 }
@@ -44,7 +48,16 @@ async function connectSSH(overrides = {}) {
 // broadcast 由 index.js 注入，避免循環依賴
 
 async function ensureSSH(broadcast) {
-  if (state.sshClient && state.sshClient.isConnected()) return state.sshClient
+  if (state.sshClient) {
+    // isConnected() 有時無法偵測到半死的連線，加一層防護
+    try {
+      if (state.sshClient.isConnected()) return state.sshClient
+    } catch {
+      // isConnected() itself threw — connection is dead
+    }
+    try { state.sshClient.dispose() } catch {}
+    state.sshClient = null
+  }
 
   try {
     state.sshClient = await connectSSH()

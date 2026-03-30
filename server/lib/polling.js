@@ -8,6 +8,18 @@ const { buildAgentState }   = require('./parser')
 const { detectAndNotify }   = require('./notify')
 
 const POLL_INTERVAL  = parseInt(process.env.POLL_INTERVAL || '3000')
+const SSH_CMD_TIMEOUT = 15_000  // SSH 指令執行逾時 15 秒
+
+// 帶逾時的 SSH execCommand，避免半死連線永久 hang 住
+function execWithTimeout(ssh, cmd, timeout = SSH_CMD_TIMEOUT) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('SSH command timed out')), timeout)
+    ssh.execCommand(cmd).then(
+      result => { clearTimeout(timer); resolve(result) },
+      err    => { clearTimeout(timer); reject(err) },
+    )
+  })
+}
 
 // Sanitize shell path to prevent command injection
 function safePath(p) {
@@ -284,8 +296,9 @@ async function fetchUsageStats(broadcast) {
 
   try {
     const b64 = Buffer.from(USAGE_PYTHON).toString('base64')
-    const { stdout } = await ssh.execCommand(
-      `echo '${b64}' | base64 -d | python3 2>/dev/null || echo "{}"`
+    const { stdout } = await execWithTimeout(ssh,
+      `echo '${b64}' | base64 -d | python3 2>/dev/null || echo "{}"`,
+      30_000,  // Python 腳本較慢，給 30 秒
     )
     const raw  = JSON.parse(stdout.trim() || '{}')
     const plan  = getPlan()
@@ -367,8 +380,8 @@ async function fetchRemoteLogs(broadcast) {
   try {
     const logDir = getRemoteLogDir()
     const [tailResult, mtimeResult] = await Promise.all([
-      ssh.execCommand(`tail -n 500 --verbose ${logDir}/*.jsonl 2>/dev/null || echo ""`),
-      ssh.execCommand(`find ${logDir} -name "*.jsonl" -printf "%f %T@\n" 2>/dev/null || echo ""`),
+      execWithTimeout(ssh, `tail -n 500 --verbose ${logDir}/*.jsonl 2>/dev/null || echo ""`),
+      execWithTimeout(ssh, `find ${logDir} -name "*.jsonl" -printf "%f %T@\n" 2>/dev/null || echo ""`),
     ])
 
     // mtime 對照表：{ "agent-id.jsonl": unixTimestamp }
@@ -408,10 +421,11 @@ async function fetchRemoteLogs(broadcast) {
     return newStates
   } catch (err) {
     console.error('Poll error:', err.message)
-    if (!ssh.isConnected()) {
-      state.sshClient = null
-      state.connectionStatus = 'disconnected'
-    }
+    // 任何 SSH 執行錯誤都強制重置連線，下次 poll 會自動重連
+    try { ssh.dispose() } catch {}
+    state.sshClient = null
+    state.connectionStatus = 'disconnected'
+    broadcast({ type: 'connection', status: 'disconnected', message: err.message })
     return null
   }
 }

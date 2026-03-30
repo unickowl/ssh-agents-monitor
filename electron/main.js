@@ -3,6 +3,23 @@
 const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
 
+// ─── 攔截未捕獲的網路錯誤，避免 ECONNRESET 等導致整個 app 崩潰 ─────────────
+process.on('uncaughtException', (err) => {
+  const ignorable = ['ECONNRESET', 'EPIPE', 'ETIMEDOUT', 'ECONNREFUSED']
+  if (ignorable.some(code => err.code === code || (err.message && err.message.includes(code)))) {
+    console.error(`⚠️ Network error caught (${err.code || err.message}), will reconnect on next poll`)
+    // 強制重置 SSH 連線
+    try {
+      const { state } = require('../server/lib/state')
+      if (state.sshClient) { state.sshClient.dispose(); state.sshClient = null }
+      state.connectionStatus = 'disconnected'
+    } catch {}
+    return // 不讓 app 崩潰
+  }
+  // 其他未知錯誤仍然拋出
+  console.error('Uncaught exception:', err)
+})
+
 // Keep a global reference to prevent garbage collection
 let mainWindow = null
 
